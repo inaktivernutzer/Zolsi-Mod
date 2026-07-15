@@ -2,6 +2,14 @@
 
 Client-side Minecraft utility client. In-game Dear ImGui menu (INSERT). Double click the generated Zolsi-Mod.jar file and attaches to a running Fabric MC session via Java Attach API. Features: ESP, Nametags, ArrayList, Triggerbot, AimAssist, CritAssist, Sprint, NoJumpDelay, AutoJumpReset, AntiBot and streamproof. No authentication, no server, no telemetry. Configs saved to `%APPDATA%\zolsi.cc\configs\`.
 
+## Pictures
+<img src="https://i.ibb.co/MFNVThR/image.png" width="600">
+<img src="https://i.ibb.co/BVRHR0dt/image.png" width="600">
+<img src="https://i.ibb.co/6JN1zgBq/image.png" width="600">
+<img src="https://i.ibb.co/S7JdqHgV/image.png" width="600">
+<img src="https://i.ibb.co/Pv2xD3Vv/image.png" width="600">
+
+
 ## Build
 
 ```
