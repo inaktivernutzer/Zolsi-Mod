@@ -34,4 +34,4 @@ Output: `build/libs/Zolsi-Mod.jar` <sub>double-click to inject.</sub>
 
 ## License
 
-MIT
+[MIT](https://github.com/dcbzpass/Zolsi-Mod/blob/main/LICENSE)
