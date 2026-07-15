@@ -9,7 +9,7 @@ set JAVA_HOME=C:\Program Files\Java\jdk-25.0.2
 .\gradlew.bat build
 ```
 
-Output: `build/libs/Zolsi-Mod.jar` -# double-click to inject.
+Output: `build/libs/Zolsi-Mod.jar` <sub>double-click to inject.</sub>
 
 ## Requirements
 
