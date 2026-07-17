@@ -91,12 +91,14 @@ public final class ZolsiAgent {
         addTracked(new TickHookTransformer());
         addTracked(new HudHookTransformer());
         addTracked(new NameTagSuppressTransformer());
+        addTracked(new SoundSuppressTransformer());
 
         retransformTarget(RenderHookTransformer.TARGET, "GlSurface");
         retransformTarget(TickHookTransformer.TARGET, "Minecraft");
         retransformTarget(FreelookTransformer.TARGET, "Camera");
         retransformTarget(HudHookTransformer.TARGET, "Hud");
         retransformTarget(NameTagSuppressTransformer.TARGET, "EntityRenderer");
+        retransformTarget(SoundSuppressTransformer.TARGET, "SoundManager");
     }
 
     private static void addTracked(ClassFileTransformer transformer) {
@@ -439,6 +441,7 @@ public final class ZolsiAgent {
         Object hudHookInstance = hudHookClass.getField("INSTANCE").get(null);
         System.getProperties().put(HudHookTransformer.HOOK_PROPERTY, hudHookInstance);
         ZolsiLog.log("hud hook stored (" + hudHookInstance.getClass().getClassLoader() + ")");
+
     }
 
     private static Class<?> findMinecraft(Instrumentation inst) {

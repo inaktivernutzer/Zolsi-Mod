@@ -83,6 +83,8 @@ public final class Widgets {
     private static float dropPanelW;
     private static float dropPanelH;
 
+    private static final int DROP_MAX_VISIBLE = 10;
+
     private static final class DropState {
         String id;
         float x;
@@ -92,6 +94,7 @@ public final class Widgets {
         String[] names;
         ImBoolean[] values;
         ImInt valueInt;
+        int scrollOffset;
         float rowX;
         float rowY;
         float rowW;
@@ -697,12 +700,19 @@ public final class Widgets {
         float a = anim(drop.id + ".d", open ? 1.0f : 0.0f, SP_DROP);
         float e = smooth(a);
         int n = drop.names.length;
+        int maxVis = Math.min(n, DROP_MAX_VISIBLE);
         float fullH = n * OPT_H + DROP_PAD * 2.0f;
-        float h = fullH * e;
+        float scrollH = maxVis * OPT_H + DROP_PAD * 2.0f;
+        float h = scrollH * e;
         if (!open && h < 2.0f) {
             drop = null;
             dropActive = false;
             return;
+        }
+        if (n > maxVis) {
+            drop.scrollOffset = Math.max(0, Math.min(drop.scrollOffset, n - maxVis));
+        } else {
+            drop.scrollOffset = 0;
         }
         float x = drop.x;
         float y = drop.y;
@@ -712,7 +722,7 @@ public final class Widgets {
 
         ImDrawList dl = ImGui.getForegroundDrawList();
         dl.pushClipRect(x - 2.0f, y - 2.0f, x + w + 2.0f, y + h + 2.0f, true);
-        dl.addRectFilled(x, y, x + w, y + fullH, Theme.col(Theme.CARD), 8.0f);
+        dl.addRectFilled(x, y, x + w, y + scrollH, Theme.col(Theme.CARD), 8.0f);
         dl.addRect(x, y, x + w, y + h, Theme.col(Theme.BORDER), 8.0f);
 
         float mx = ImGui.getMousePosX();
@@ -720,8 +730,18 @@ public final class Widgets {
         boolean fullyOpen = open && a > 0.85f;
         boolean click = ImGui.isMouseClicked(0);
 
-        for (int i = 0; i < n; i++) {
-            float oy = y + DROP_PAD + i * OPT_H;
+        boolean inPanel = mx >= x && mx <= x + w && my >= y && my <= y + scrollH;
+        if (fullyOpen && inPanel && n > maxVis) {
+            float wheel = ImGui.getIO().getMouseWheel();
+            if (wheel != 0) {
+                drop.scrollOffset = Math.max(0, Math.min(drop.scrollOffset - (int) Math.signum(wheel), n - maxVis));
+            }
+        }
+        int scrollStart = drop.scrollOffset;
+        int scrollEnd = Math.min(n, scrollStart + maxVis);
+        dl.pushClipRect(x, y + DROP_PAD, x + w, y + scrollH - DROP_PAD, true);
+        for (int i = scrollStart; i < scrollEnd; i++) {
+            float oy = y + DROP_PAD + (i - scrollStart) * OPT_H;
             boolean selected = drop.multi ? drop.values[i].get() : drop.valueInt.get() == i;
             boolean rowHov = fullyOpen && mx >= x && mx <= x + w && my >= oy && my <= oy + OPT_H;
             float hov = anim(drop.id + ".o" + i + ".h", rowHov ? 1.0f : 0.0f, SP_HOVER);
@@ -751,16 +771,25 @@ public final class Widgets {
             }
         }
         dl.popClipRect();
+        if (n > maxVis) {
+            float sbX = x + w - 10.0f;
+            float sbY = y + DROP_PAD;
+            float sbH = scrollH - DROP_PAD * 2.0f;
+            float thumbH = sbH * maxVis / n;
+            float thumbY = sbY + (sbH - thumbH) * drop.scrollOffset / (n - maxVis);
+            dl.addRectFilled(sbX, sbY, sbX + 4.0f, sbY + sbH, Theme.col(Theme.FIELD, 0.6f), 2.0f);
+            dl.addRectFilled(sbX, thumbY, sbX + 4.0f, thumbY + thumbH, Theme.col(Theme.TEXT, 0.5f), 2.0f);
+        }
+        dl.popClipRect();
         Theme.setLayerAlpha(savedLayer);
 
         dropActive = true;
         dropPanelX = x;
         dropPanelY = y;
         dropPanelW = w;
-        dropPanelH = h;
+        dropPanelH = scrollH;
 
         if (open && click) {
-            boolean inPanel = mx >= x && mx <= x + w && my >= y && my <= y + h;
             boolean inRow = mx >= drop.rowX && mx <= drop.rowX + drop.rowW
                 && my >= drop.rowY && my <= drop.rowY + drop.rowH;
             if (!inPanel && !inRow) {

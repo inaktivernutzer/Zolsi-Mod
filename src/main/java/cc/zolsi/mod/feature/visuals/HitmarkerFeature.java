@@ -6,277 +6,326 @@ import imgui.ImDrawList;
 import imgui.ImGui;
 import imgui.type.ImBoolean;
 import imgui.type.ImInt;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
 import javax.sound.sampled.FloatControl;
+import javax.sound.sampled.SourceDataLine;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL30;
+import org.lwjgl.stb.STBImage;
+
+import java.io.InputStream;
+import java.util.List;
 
 public final class HitmarkerFeature {
 
     private static final HitmarkerFeature INSTANCE = new HitmarkerFeature();
 
-    public static final String[] STYLES = {"Russian X", "Plus", "Diamond", "Circle", "Starburst"};
+    public static final String[] STYLES = {
+        "Star", "Heart", "Circle", "Snowflake"
+    };
+    private static final String[] TEXTURE_FILES = {
+        "star", "heart", "circle", "snowflake"
+    };
 
     public static final String[] SOUND_FILES = {
-        "agpa1", "agpa2", "aimbooster", "amongus_kill", "applepay", "arena_switch",
-        "bameware", "bell", "ben", "bonk", "brotato", "bubble",
-        "click", "cod", "combobreak", "door", "fatality", "flush",
-        "hentai1", "hentai2", "hentai3", "kick", "kill_doof_01", "killcard_1",
-        "minecraft_bow_ding", "minecraft_button", "minecraft_egg_throw", "minecraft_hit", "minecraft_xp_gain",
-        "money_claim", "mouthsound", "msfrs", "na naxuy", "pop",
-        "pubg_pan", "quaver", "regulus", "rust_headshot", "satisfying click",
-        "spiral knight", "stony", "tavern_misc1c", "telegram_notification", "trident_pierce",
-        "water_drop", "xp_rankdown_02", "zelda"
+        "aimbooster", "ben", "bonk", "brotato", "click", "kick",
+        "money claim", "mouthsound", "pop", "quaver", "regulus",
+        "satisfying click", "spiral knight", "tavern misc1c", "ting",
+        "trident pierce", "water drop", "zelda",
+        "[minecraft] bow ding", "[minecraft] button", "[minecraft] egg throw",
+        "[minecraft] hitsound", "[minecraft] old hitsound", "[minecraft] XP gain"
     };
 
     public static final String[] SOUND_NAMES = {
-        "AGPA 1", "AGPA 2", "AimBooster", "Among Us Kill", "Apple Pay", "Arena Switch",
-        "Bameware", "Bell", "Ben", "Bonk", "Brotato", "Bubble",
-        "Click", "CoD", "Combo Break", "Door", "Fatality", "Flush",
-        "Hentai 1", "Hentai 2", "Hentai 3", "Kick", "Kill Doof", "Killcard",
-        "Minecraft Bow Ding", "Minecraft Button", "Minecraft Egg Throw", "Minecraft Hit", "Minecraft XP Gain",
-        "Money Claim", "Mouth Sound", "MSFRS", "Na Naxuy", "Pop",
-        "PUBG Pan", "Quaver", "Regulus", "Rust Headshot", "Satisfying Click",
-        "Spiral Knight", "Stony", "Tavern", "Telegram", "Trident Pierce",
-        "Water Drop", "XP Rankdown", "Zelda"
+        "AimBooster", "Ben", "Bonk", "Brotato", "Click", "Kick",
+        "Money Claim", "Mouth Sound", "Pop", "Quaver", "Regulus",
+        "Satisfying Click", "Spiral Knight", "Tavern", "Ting",
+        "Trident Pierce", "Water Drop", "Zelda",
+        "Minecraft Bow Ding", "Minecraft Button", "Minecraft Egg Throw",
+        "Minecraft Hit", "Minecraft Old Hit", "Minecraft XP Gain"
     };
+
+    public static final String[] PHYSICS_MODES = {"Fall", "Fly"};
 
     public final ImBoolean enabled = new ImBoolean(false);
     public final Keybind bind = new Keybind();
     public final ImInt style = new ImInt(0);
-    public final float[] color = {1.0f, 0.22f, 0.22f, 1.0f};
-    public final float[] size = {6.0f};
-    public final float[] duration = {0.5f};
-    public final float[] gap = {3.0f};
-    public final float[] thickness = {2.0f};
+    public final float[] particleLife = {2.0f};
+    public final float[] particleSpeed = {2.0f};
+    public final ImInt particleAmount = new ImInt(3);
+    public final ImInt physicsMode = new ImInt(0);
     public final ImBoolean soundEnabled = new ImBoolean(true);
     public final float[] soundVolume = {0.45f};
     public final ImInt soundIndex = new ImInt(0);
 
-    private final List<HitEntry> active = new ArrayList<>();
-    private int prevSwingTime;
-    private Clip soundClip;
+    private final List<Particle> particles = new CopyOnWriteArrayList<>();
+    private final Map<String, Integer> textureCache = new ConcurrentHashMap<>();
+    private final Matrix4f viewProj = new Matrix4f();
+    private final Vector4f scratch = new Vector4f();
+    private final float[] scrPos = new float[2];
+    private float displayW;
+    private float displayH;
+
+    private byte[] soundData;
+    private AudioFormat soundFormat;
     private int loadedSoundIndex = -1;
     private boolean loggedSoundError;
 
-    private final Matrix4f scratchM = new Matrix4f();
-    private final Vector4f scratchV = new Vector4f();
-    private final float[] scratch2 = new float[2];
-
-    private static final float TWO_PI = (float) (Math.PI * 2.0);
+    private boolean prevSoundEnabled;
+    private int prevSwingTime;
+    private boolean prevAttackDown;
 
     public static HitmarkerFeature get() {
         return INSTANCE;
     }
 
-    public void detect() {
+    private void detectHits() {
         if (!enabled.get()) return;
+        boolean soundNow = soundEnabled.get();
+        if (soundNow != prevSoundEnabled) {
+            if (soundNow) {
+                System.getProperties().put("zolsi.soundFilter", Boolean.TRUE);
+            } else {
+                System.getProperties().remove("zolsi.soundFilter");
+            }
+            prevSoundEnabled = soundNow;
+        }
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
         int st = mc.player.swingTime;
-        if (st > 0 && prevSwingTime == 0) {
+        boolean attackKey = mc.options.keyAttack.isDown();
+        boolean swingEdge = st > 0 && prevSwingTime == 0;
+        boolean keyEdge = attackKey && !prevAttackDown;
+        prevSwingTime = st;
+        prevAttackDown = attackKey;
+
+        Vec3 pos = null;
+        if (swingEdge || keyEdge) {
             if (mc.hitResult instanceof EntityHitResult ehr) {
-                Entity target = ehr.getEntity();
-                if (target != mc.player && target.isAlive()) {
-                    registerHit(target);
+                Entity hit = ehr.getEntity();
+                if (hit != mc.player && hit.isAlive()) {
+                    pos = ehr.getLocation();
                 }
             }
         }
-        prevSwingTime = st;
+        if (pos == null) {
+            LivingEntity lastHurt = mc.player.getLastHurtMob();
+            if (lastHurt != null && lastHurt != mc.player && lastHurt.isAlive()) {
+                pos = lastHurt.position();
+            }
+        }
+        if (pos != null) {
+            spawnParticles(pos);
+        }
     }
 
-    private void registerHit(Entity target) {
-        active.removeIf(e -> !e.entity.isAlive());
-        active.add(new HitEntry(target, System.currentTimeMillis()));
+    private void spawnParticles(Vec3 pos) {
+        int amt = Math.max(1, particleAmount.get());
+        float spd = particleSpeed[0] * 0.02f;
+        float px = (float) pos.x;
+        float py = (float) pos.y;
+        float pz = (float) pos.z;
+        for (int i = 0; i < amt; i++) {
+            float mx = (float) (Math.random() - 0.5) * 2.0f * spd;
+            float my = (float) (Math.random() - 0.5) * 2.0f * spd;
+            float mz = (float) (Math.random() - 0.5) * 2.0f * spd;
+            particles.add(new Particle(px, py, pz, mx, my, mz));
+        }
         if (soundEnabled.get()) {
             playSound();
         }
     }
 
     public void render() {
-        if (active.isEmpty()) return;
+        detectHits();
+        if (particles.isEmpty()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
         Camera camera = mc.gameRenderer.mainCamera();
         if (camera == null) return;
 
-        float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(true);
-        Vec3 camPos = camera.position();
-        camera.getViewRotationProjectionMatrix(this.scratchM);
+        displayW = ImGui.getIO().getDisplaySizeX();
+        displayH = ImGui.getIO().getDisplaySizeY();
+        if (displayW <= 0.0f || displayH <= 0.0f) return;
 
-        float dispW = ImGui.getIO().getDisplaySizeX();
-        float dispH = ImGui.getIO().getDisplaySizeY();
-        float now = System.currentTimeMillis();
-        float durMs = this.duration[0] * 1000.0f;
-        float baseSize = this.size[0];
-        float baseGap = this.gap[0];
-        float thick = this.thickness[0];
-        int curStyle = this.style.get();
+        Vec3 camPos = camera.position();
+        camera.getViewRotationProjectionMatrix(viewProj);
+        float dt = Math.min(ImGui.getIO().getDeltaTime(), 0.05f);
 
         ImDrawList dl = ImGui.getForegroundDrawList();
+        int texId = getTexture(style.get());
 
-        Iterator<HitEntry> it = active.iterator();
-        while (it.hasNext()) {
-            HitEntry e = it.next();
-            if (e.entity == null || !e.entity.isAlive()) {
-                it.remove();
-                continue;
-            }
-            float age = now - e.time;
-            if (age > durMs) {
-                it.remove();
-                continue;
-            }
+        particles.removeIf(p -> {
+            p.update(dt);
+            if (p.dead) return true;
 
-            Vec3 pos = e.entity.getPosition(partialTick);
-            float entityH = e.entity instanceof LivingEntity le ? le.getBbHeight() : 1.8f;
-            if (!project(camPos, pos.x, pos.y + entityH * 0.5f, pos.z, dispW, dispH, this.scratch2)) {
-                continue;
-            }
-            float cx = this.scratch2[0];
-            float cy = this.scratch2[1];
+            if (!project(camPos, p.x, p.y, p.z, scrPos)) return true;
 
-            float p = age / durMs;
-            float scale;
-            float alpha;
-            if (p < 0.12f) {
-                float t = p / 0.12f;
-                scale = 0.3f + 0.7f * t;
-                alpha = 1.0f;
-            } else if (p < 0.35f) {
-                scale = 1.0f;
-                alpha = 1.0f;
+            double screenZ = Math.abs(p.z - camPos.z);
+            if (screenZ < 0.1) return true;
+
+            double distScale = 8.0 / Math.sqrt(Math.max(0.1, screenZ));
+            distScale = Math.max(0.4, Math.min(4.0, distScale));
+            float size = 12.0f * (float) distScale * p.alpha;
+            if (size < 0.5f) return true;
+
+            int col = packColor(1.0f, 1.0f, 1.0f, p.alpha);
+            if (texId != 0) {
+                dl.addImage(texId, scrPos[0] - size * 0.5f, scrPos[1] - size * 0.5f,
+                    scrPos[0] + size * 0.5f, scrPos[1] + size * 0.5f,
+                    0.0f, 0.0f, 1.0f, 1.0f, col);
             } else {
-                float t = (p - 0.35f) / 0.65f;
-                scale = 1.0f + 0.2f * t;
-                alpha = 1.0f - t * t;
+                dl.addCircleFilled(scrPos[0], scrPos[1], size * 0.5f, col, 20);
             }
+            return false;
+        });
+    }
 
-            float s = baseSize * scale;
-            float g = baseGap * scale;
-            int col = packColor(this.color[0], this.color[1], this.color[2], this.color[3] * alpha);
+    private int getTexture(int styleIdx) {
+        if (styleIdx < 0 || styleIdx >= TEXTURE_FILES.length) return 0;
+        String name = TEXTURE_FILES[styleIdx];
+        Integer cached = textureCache.get(name);
+        if (cached != null) return cached;
+        int texId = loadTexture("/assets/zolsi/particles/" + name + ".png");
+        textureCache.put(name, texId);
+        return texId;
+    }
 
-            switch (curStyle) {
-                case 0 -> drawRussianX(dl, cx, cy, s, g, col, thick);
-                case 1 -> drawPlus(dl, cx, cy, s, g, col, thick);
-                case 2 -> drawDiamond(dl, cx, cy, s, col, thick);
-                case 3 -> drawCircle(dl, cx, cy, s, col, thick, p);
-                case 4 -> drawStarburst(dl, cx, cy, s, col, thick);
+    private static int loadTexture(String resourcePath) {
+        try (InputStream in = HitmarkerFeature.class.getResourceAsStream(resourcePath)) {
+            if (in == null) {
+                ZolsiLog.log("hitmarker: texture not found: " + resourcePath);
+                return 0;
             }
+            byte[] fileBytes = in.readAllBytes();
+            ByteBuffer buf = BufferUtils.createByteBuffer(fileBytes.length);
+            buf.put(fileBytes);
+            buf.flip();
+
+            IntBuffer w = BufferUtils.createIntBuffer(1);
+            IntBuffer h = BufferUtils.createIntBuffer(1);
+            IntBuffer comp = BufferUtils.createIntBuffer(1);
+            ByteBuffer image = STBImage.stbi_load_from_memory(buf, w, h, comp, 4);
+            if (image == null) {
+                ZolsiLog.log("hitmarker: STBImage decode failed: " + resourcePath + " - " + STBImage.stbi_failure_reason());
+                return 0;
+            }
+            int width = w.get(0);
+            int height = h.get(0);
+
+            int texId = GL11.glGenTextures();
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, width, height, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, image);
+            GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+            STBImage.stbi_image_free(image);
+
+            ZolsiLog.log("hitmarker: loaded texture " + resourcePath + " (" + width + "x" + height + ")");
+            return texId;
+        } catch (Throwable t) {
+            ZolsiLog.log("hitmarker: texture load error: " + resourcePath, t);
+            return 0;
         }
     }
 
-    private void drawRussianX(ImDrawList dl, float cx, float cy, float s, float g, int col, float t) {
-        dl.addLine(cx - g, cy - g - s, cx - g, cy - g, col, t);
-        dl.addLine(cx + g, cy - g, cx + g, cy - g - s, col, t);
-        dl.addLine(cx - g, cy + g, cx - g, cy + g + s, col, t);
-        dl.addLine(cx + g, cy + g + s, cx + g, cy + g, col, t);
-    }
-
-    private void drawPlus(ImDrawList dl, float cx, float cy, float s, float g, int col, float t) {
-        dl.addLine(cx, cy - g - s, cx, cy - g, col, t);
-        dl.addLine(cx + g, cy, cx + g + s, cy, col, t);
-        dl.addLine(cx, cy + g, cx, cy + g + s, col, t);
-        dl.addLine(cx - g - s, cy, cx - g, cy, col, t);
-    }
-
-    private void drawDiamond(ImDrawList dl, float cx, float cy, float s, int col, float t) {
-        float h = s * 1.2f;
-        dl.addLine(cx, cy - h, cx + h * 0.6f, cy, col, t);
-        dl.addLine(cx + h * 0.6f, cy, cx, cy + h, col, t);
-        dl.addLine(cx, cy + h, cx - h * 0.6f, cy, col, t);
-        dl.addLine(cx - h * 0.6f, cy, cx, cy - h, col, t);
-    }
-
-    private void drawCircle(ImDrawList dl, float cx, float cy, float s, int col, float t, float progress) {
-        float r = s * 0.5f + s * progress;
-        dl.addCircle(cx, cy, Math.max(1.0f, r), col, 24, t);
-    }
-
-    private void drawStarburst(ImDrawList dl, float cx, float cy, float s, int col, float t) {
-        for (int i = 0; i < 8; i++) {
-            float angle = TWO_PI * i / 8.0f;
-            float dx = (float) Math.cos(angle) * s;
-            float dy = (float) Math.sin(angle) * s;
-            dl.addLine(cx, cy, cx + dx, cy + dy, col, t);
+    public void freeTextures() {
+        for (int id : textureCache.values()) {
+            if (id != 0) GL11.glDeleteTextures(id);
         }
+        textureCache.clear();
     }
 
-    private boolean project(Vec3 camPos, double wx, double wy, double wz, float dispW, float dispH, float[] out) {
-        this.scratchV.set((float) (wx - camPos.x), (float) (wy - camPos.y), (float) (wz - camPos.z), 1.0f);
-        this.scratchM.transform(this.scratchV);
-        float w = this.scratchV.w;
+    private boolean project(Vec3 camPos, double wx, double wy, double wz, float[] out) {
+        scratch.set((float) (wx - camPos.x), (float) (wy - camPos.y), (float) (wz - camPos.z), 1.0f);
+        viewProj.transform(scratch);
+        float w = scratch.w;
         if (w <= 1.0e-4f) return false;
-        float ndcX = this.scratchV.x / w;
-        float ndcY = this.scratchV.y / w;
-        out[0] = (ndcX * 0.5f + 0.5f) * dispW;
-        out[1] = (1.0f - (ndcY * 0.5f + 0.5f)) * dispH;
+        float ndcX = scratch.x / w;
+        float ndcY = scratch.y / w;
+        out[0] = (ndcX * 0.5f + 0.5f) * displayW;
+        out[1] = (1.0f - (ndcY * 0.5f + 0.5f)) * displayH;
         return true;
     }
 
     private void playSound() {
-        int idx = this.soundIndex.get();
+        int idx = soundIndex.get();
         if (idx < 0 || idx >= SOUND_FILES.length) return;
         if (idx != loadedSoundIndex) {
-            if (soundClip != null) {
-                soundClip.close();
-                soundClip = null;
-            }
             loadedSoundIndex = -1;
+            soundData = null;
+            soundFormat = null;
+            loggedSoundError = false;
             loadSound(idx);
         }
-        if (soundClip != null) {
+        if (soundData == null) return;
+        byte[] data = soundData;
+        AudioFormat fmt = soundFormat;
+        float vol = soundVolume[0];
+        new Thread(() -> {
+            SourceDataLine line = null;
             try {
-                soundClip.stop();
-                soundClip.setFramePosition(0);
-                if (soundClip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
-                    FloatControl gain = (FloatControl) soundClip.getControl(FloatControl.Type.MASTER_GAIN);
-                    float db = this.soundVolume[0] <= 0.0f ? -80.0f
-                        : Math.max(-80.0f, Math.min(6.0f, 20.0f * (float) Math.log10(this.soundVolume[0])));
+                line = AudioSystem.getSourceDataLine(fmt);
+                line.open(fmt);
+                if (line.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+                    FloatControl gain = (FloatControl) line.getControl(FloatControl.Type.MASTER_GAIN);
+                    float db = vol <= 0.0f ? -80.0f
+                        : Math.max(-80.0f, Math.min(6.0f, 20.0f * (float) Math.log10(vol)));
                     gain.setValue(db);
                 }
-                soundClip.start();
+                line.start();
+                line.write(data, 0, data.length);
+                line.drain();
             } catch (Throwable t) {
                 if (!loggedSoundError) {
                     loggedSoundError = true;
                     ZolsiLog.log("hitmarker: sound playback failed", t);
                 }
+            } finally {
+                if (line != null) line.close();
             }
-        }
+        }, "zolsi-hitsound").start();
     }
 
     private void loadSound(int idx) {
-        String path = "/assets/zolsi/sounds/" + SOUND_FILES[idx] + ".vsnd_c";
-        try (java.io.InputStream in = getClass().getResourceAsStream(path)) {
+        loggedSoundError = false;
+        String path = "/assets/zolsi/sounds/" + SOUND_FILES[idx] + ".wav";
+        try (InputStream in = HitmarkerFeature.class.getResourceAsStream(path)) {
             if (in == null) {
                 ZolsiLog.log("hitmarker: sound not found: " + path);
                 return;
             }
-            byte[] fileBytes = in.readAllBytes();
-            if (fileBytes.length <= 88) {
-                ZolsiLog.log("hitmarker: sound file too small: " + path);
-                return;
+            byte[] raw = in.readAllBytes();
+            try (AudioInputStream ais = AudioSystem.getAudioInputStream(new ByteArrayInputStream(raw))) {
+                soundFormat = ais.getFormat();
+                soundData = ais.readAllBytes();
+                loadedSoundIndex = idx;
+                ZolsiLog.log("hitmarker: loaded sound " + SOUND_FILES[idx] + " (" + raw.length + " bytes, " + soundFormat.getEncoding() + ")");
             }
-            int dataLen = fileBytes.length - 88;
-            byte[] pcm = new byte[dataLen];
-            System.arraycopy(fileBytes, 88, pcm, 0, dataLen);
-            AudioFormat format = new AudioFormat(48000, 16, 1, true, false);
-            Clip clip = AudioSystem.getClip();
-            clip.open(format, pcm, 0, pcm.length);
-            this.soundClip = clip;
-            this.loadedSoundIndex = idx;
         } catch (Throwable t) {
             if (!loggedSoundError) {
                 loggedSoundError = true;
@@ -293,10 +342,54 @@ public final class HitmarkerFeature {
         return (ai << 24) | (bi << 16) | (gi << 8) | ri;
     }
 
-    private static final class HitEntry {
-        final Entity entity;
-        final float time;
-        HitEntry(Entity entity, float time) { this.entity = entity; this.time = time; }
+    private final class Particle {
+        double x, y, z;
+        double mx, my, mz;
+        float alpha = 1.0f;
+        float elapsed;
+        boolean dead;
+
+        Particle(double x, double y, double z, double mx, double my, double mz) {
+            this.x = x; this.y = y; this.z = z;
+            this.mx = mx; this.my = my; this.mz = mz;
+        }
+
+        void update(float dt) {
+            elapsed += dt;
+            float life = particleLife[0];
+            if (elapsed >= life) { dead = true; return; }
+            float p = elapsed / life;
+            alpha = 1.0f - p * p;
+
+            if (physicsMode.get() == 0) {
+                my -= 0.035 * dt * 20.0;
+            }
+
+            double drag = Math.pow(0.99, dt * 20.0);
+            mx *= drag; my *= drag; mz *= drag;
+
+            double step = dt * 20.0;
+            double nx = x + mx * step;
+            double ny = y + my * step;
+            double nz = z + mz * step;
+
+            if (isSolid(nx, ny - 0.05, nz)) {
+                my = -my * 0.5;
+                mx *= 0.8;
+                mz *= 0.8;
+                ny = y + my * step;
+            }
+
+            x = nx; y = ny; z = nz;
+        }
+
+        private boolean isSolid(double px, double py, double pz) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level == null) return false;
+            BlockPos bp = BlockPos.containing(px, py, pz);
+            BlockState bs = mc.level.getBlockState(bp);
+            return !bs.isAir() && !bs.is(Blocks.WATER) && !bs.is(Blocks.LAVA);
+        }
     }
 
     private HitmarkerFeature() {}

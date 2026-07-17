@@ -1,7 +1,6 @@
 package cc.zolsi.mod.feature.combat;
 import cc.zolsi.mod.feature.Keybind;
 import cc.zolsi.mod.feature.utility.AntiBotFeature;
-
 import cc.zolsi.mod.ZolsiCore;
 import cc.zolsi.mod.ZolsiLog;
 import com.mojang.blaze3d.platform.InputConstants;

@@ -566,7 +566,6 @@ public final class ImGuiManager {
         if (unhooked) {
             return;
         }
-        tickSafe(HitmarkerFeature.get()::detect, 3);
         tickSafe(TriggerbotFeature.get()::attackTick, 3);
         tickSafe(AutoJumpResetFeature.get()::tick, 5);
     }
