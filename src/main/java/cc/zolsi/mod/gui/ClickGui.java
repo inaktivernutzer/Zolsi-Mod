@@ -724,16 +724,18 @@ public final class ClickGui {
         drawBindPopup("hm", hm.bind);
         if (Widgets.cardBodyBegin("hm")) {
             Widgets.cardDivider();
+            Widgets.selectOne("hm.style", "style", hm.style, HitmarkerFeature.STYLES);
             Widgets.colorRow("##hmcolor", "color", hm.color,
                 ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoAlpha | ImGuiColorEditFlags.PickerHueWheel);
-            Widgets.slider("hm.size", "size", hm.size, 1.0f, 20.0f, "%.0f");
-            Widgets.slider("hm.gap", "gap", hm.gap, 0.0f, 10.0f, "%.1f");
+            Widgets.slider("hm.size", "size", hm.size, 2.0f, 18.0f, "%.0f");
+            Widgets.slider("hm.gap", "gap", hm.gap, 0.0f, 8.0f, "%.1f");
             Widgets.slider("hm.thick", "thickness", hm.thickness, 0.5f, 5.0f, "%.1f");
             Widgets.slider("hm.duration", "duration", hm.duration, 0.1f, 1.5f, "%.2fs");
             Widgets.cardDivider();
             Widgets.toggle("hm.sound", "hit sound", hm.soundEnabled);
             if (Widgets.beginSub("hm.soundSub", hm.soundEnabled.get())) {
                 Widgets.slider("hm.vol", "volume", hm.soundVolume, 0.0f, 1.0f, "%.2f");
+                Widgets.selectOne("hm.snd", "sound", hm.soundIndex, HitmarkerFeature.SOUND_NAMES);
             }
             Widgets.endSub("hm.soundSub");
         }
@@ -878,12 +880,14 @@ public final class ClickGui {
         data.put("hitmarker.color.g", hm.color[1]);
         data.put("hitmarker.color.b", hm.color[2]);
         data.put("hitmarker.color.a", hm.color[3]);
+        data.put("hitmarker.style", hm.style.get());
         data.put("hitmarker.size", hm.size[0]);
         data.put("hitmarker.gap", hm.gap[0]);
         data.put("hitmarker.thickness", hm.thickness[0]);
         data.put("hitmarker.duration", hm.duration[0]);
         data.put("hitmarker.soundEnabled", hm.soundEnabled.get());
         data.put("hitmarker.soundVolume", hm.soundVolume[0]);
+        data.put("hitmarker.soundIndex", hm.soundIndex.get());
         data.put("streamproof.enabled", StreamproofOverlay.get().enabled.get());
         SprintFeature sprint = SprintFeature.get();
         data.put("sprint.enabled", sprint.enabled.get());
@@ -1183,6 +1187,8 @@ public final class ClickGui {
         if (v instanceof Number) { hm.color[2] = ((Number) v).floatValue(); }
         v = data.get("hitmarker.color.a");
         if (v instanceof Number) { hm.color[3] = ((Number) v).floatValue(); }
+        v = data.get("hitmarker.style");
+        if (v instanceof Number) { hm.style.set(((Number) v).intValue()); }
         v = data.get("hitmarker.size");
         if (v instanceof Number) { hm.size[0] = ((Number) v).floatValue(); }
         v = data.get("hitmarker.gap");
@@ -1195,6 +1201,8 @@ public final class ClickGui {
         if (v instanceof Boolean) { hm.soundEnabled.set((Boolean) v); }
         v = data.get("hitmarker.soundVolume");
         if (v instanceof Number) { hm.soundVolume[0] = ((Number) v).floatValue(); }
+        v = data.get("hitmarker.soundIndex");
+        if (v instanceof Number) { hm.soundIndex.set(((Number) v).intValue()); }
     }
 
     private void applySprint(Map<String, Object> data) {
