@@ -8,6 +8,7 @@ import cc.zolsi.mod.feature.visuals.ArrayListFeature;
 import cc.zolsi.mod.feature.utility.AutoJumpResetFeature;
 import cc.zolsi.mod.feature.combat.CritAssistFeature;
 import cc.zolsi.mod.feature.visuals.EspFeature;
+import cc.zolsi.mod.feature.visuals.HitmarkerFeature;
 import cc.zolsi.mod.feature.Keybind;
 import cc.zolsi.mod.feature.visuals.NametagsFeature;
 import cc.zolsi.mod.feature.utility.NoJumpDelayFeature;
@@ -93,6 +94,7 @@ public final class ImGuiManager {
     private boolean triggerbotBindWasDown;
     private boolean critAssistBindWasDown;
     private boolean aimAssistBindWasDown;
+    private boolean hitmarkerBindWasDown;
     private boolean nametagsBindWasDown;
     private boolean autoJumpResetBindWasDown;
     private boolean antiBotBindWasDown;
@@ -424,6 +426,17 @@ public final class ImGuiManager {
                 }
             }
         }
+        HitmarkerFeature hit = HitmarkerFeature.get();
+        if (hit.enabled.get()) {
+            try {
+                hit.render();
+            } catch (Throwable t) {
+                if (!loggedArrayError) {
+                    loggedArrayError = true;
+                    ZolsiLog.log("hitmarker render failed", t);
+                }
+            }
+        }
         try {
             clickGui.draw();
         } catch (Throwable t) {
@@ -492,6 +505,7 @@ public final class ImGuiManager {
     private void pollBinds(long window) {
         espBindWasDown = pollBind(window, EspFeature.get().bind, EspFeature.get().enabled, espBindWasDown);
         arrayBindWasDown = pollBind(window, ArrayListFeature.get().bind, ArrayListFeature.get().enabled, arrayBindWasDown);
+        hitmarkerBindWasDown = pollBind(window, HitmarkerFeature.get().bind, HitmarkerFeature.get().enabled, hitmarkerBindWasDown);
         sprintBindWasDown = pollBind(window, SprintFeature.get().bind, SprintFeature.get().enabled, sprintBindWasDown);
         noJumpDelayBindWasDown = pollBind(window, NoJumpDelayFeature.get().bind, NoJumpDelayFeature.get().enabled, noJumpDelayBindWasDown);
         autoJumpResetBindWasDown = pollBind(window, AutoJumpResetFeature.get().bind, AutoJumpResetFeature.get().enabled, autoJumpResetBindWasDown);
@@ -552,6 +566,7 @@ public final class ImGuiManager {
         if (unhooked) {
             return;
         }
+        tickSafe(HitmarkerFeature.get()::detect, 3);
         tickSafe(TriggerbotFeature.get()::attackTick, 3);
         tickSafe(AutoJumpResetFeature.get()::tick, 5);
     }

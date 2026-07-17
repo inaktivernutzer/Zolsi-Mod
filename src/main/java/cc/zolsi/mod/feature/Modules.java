@@ -9,6 +9,7 @@ import cc.zolsi.mod.feature.utility.NoJumpDelayFeature;
 import cc.zolsi.mod.feature.utility.SprintFeature;
 import cc.zolsi.mod.feature.visuals.ArrayListFeature;
 import cc.zolsi.mod.feature.visuals.EspFeature;
+import cc.zolsi.mod.feature.visuals.HitmarkerFeature;
 import cc.zolsi.mod.feature.visuals.NametagsFeature;
 import imgui.type.ImBoolean;
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ public final class Modules {
         register("Sprint", UTILITY, SprintFeature.get().enabled);
         register("2D ESP", VISUALS, EspFeature.get().enabled);
         register("Nametags", VISUALS, NametagsFeature.get().enabled);
+        register("Hitmarkers", VISUALS, HitmarkerFeature.get().enabled);
     }
 
     public static void register(String name, int category, ImBoolean enabled) {
