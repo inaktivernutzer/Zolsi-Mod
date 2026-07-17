@@ -1,0 +1,58 @@
+plugins {
+    id "net.fabricmc.fabric-loom" version "${loom_version}"
+    id "java"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url = "https://maven.fabricmc.net/" }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    implementation "io.github.spair:imgui-java-binding:${project.imgui_version}"
+    implementation "io.github.spair:imgui-java-lwjgl3:${project.imgui_version}"
+    implementation "io.github.spair:imgui-java-natives-windows:${project.imgui_version}"
+
+    compileOnly "org.ow2.asm:asm:9.7.1"
+    compileOnly "org.ow2.asm:asm-commons:9.7.1"
+
+    compileOnly "com.google.code.gson:gson:2.11.0"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    withSourcesJar()
+}
+
+tasks.named("compileJava", JavaCompile) {
+    options.release = 25
+}
+
+tasks.named("jar", Jar) {
+    archiveVersion = ""
+    manifest {
+        attributes(
+            "Main-Class": "cc.zolsi.boot.ZolsiApp",
+            "Agent-Class": "cc.zolsi.mod.inject.ZolsiAgent",
+            "Can-Redefine-Classes": "true",
+            "Can-Retransform-Classes": "true"
+        )
+    }
+    into("META-INF/jars") {
+        from {
+            configurations.runtimeClasspath.files.findAll { it.name.startsWith("imgui-java") }
+        }
+    }
+}
